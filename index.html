@@ -5,16 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pikmin Location</title>
     <style>
-      body { font-family: sans-serif; padding: 20px; background-color: #f5f5f7; }
+      body { font-family: -apple-system, sans-serif; padding: 20px; background-color: #f5f5f7; }
       button { padding: 10px 20px; background-color: #007aff; color: white; border: none; border-radius: 6px; cursor: pointer; }
-      #device-list { margin-top: 20px; padding: 15px; background: white; border-radius: 8px; }
+      button:hover { background-color: #005bb5; }
+      button:disabled { background-color: #ccc; cursor: not-allowed; }
+      #device-list { margin-top: 20px; padding: 15px; background: white; border-radius: 8px; min-height: 50px;}
       .device-item { padding: 10px; border-bottom: 1px solid #eee; }
+      .section-divider { margin: 20px 0; border: 0; border-top: 1px solid #ddd; }
     </style>
   </head>
   <body>
     <h2>📍 Pikmin Location 控制台</h2>
+    
     <button id="scan-btn">掃描 iOS 設備</button>
     <div id="device-list">等待掃描...</div>
+
+    <hr class="section-divider" />
+
+    <h2>🛠️ 設備操作</h2>
+    <button id="mount-btn" disabled>掛載 DDI (測試 iOS 16.5)</button>
+    <div id="mount-status" style="margin-top: 15px; font-weight: bold; white-space: pre-wrap;"></div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>
