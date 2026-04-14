@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pikmin Location</title>
+    <style>
+      body { font-family: sans-serif; padding: 20px; background-color: #f5f5f7; }
+      button { padding: 10px 20px; background-color: #007aff; color: white; border: none; border-radius: 6px; cursor: pointer; }
+      #device-list { margin-top: 20px; padding: 15px; background: white; border-radius: 8px; }
+      .device-item { padding: 10px; border-bottom: 1px solid #eee; }
+    </style>
+  </head>
+  <body>
+    <h2>📍 Pikmin Location 控制台</h2>
+    <button id="scan-btn">掃描 iOS 設備</button>
+    <div id="device-list">等待掃描...</div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
