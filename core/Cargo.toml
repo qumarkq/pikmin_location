@@ -4,3 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+rusty_libimobiledevice = "0.2"
+thiserror = "1.0"      # 用於建立結構化的自訂錯誤
+tracing = "0.1"        # 現代化的結構化日誌系統 (取代 println!)
+tracing-subscriber = "0.3"
