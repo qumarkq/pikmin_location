@@ -1,59 +1,72 @@
 use crate::domain::{ConnectionType, IosDevice};
-use crate::error::DeviceError;
+use crate::error::AppError;
 use rusty_libimobiledevice::idevice;
-use tracing::{debug, error, info};
+use rusty_libimobiledevice::services::lockdownd::LockdowndClient;
 
-// 嚴格審計點：這裡必須是 pub struct
-pub struct DeviceDiscoveryService;
+/// 取得目前所有連接的 iOS 設備
+#[tauri::command]
+pub async fn get_connected_devices() -> Result<Vec<IosDevice>, AppError> {
+    let devices = tokio::task::spawn_blocking(|| -> Result<Vec<IosDevice>, AppError> {
+        let mut result_list = Vec::new();
 
-impl DeviceDiscoveryService {
-    // 嚴格審計點：這裡必須是 pub fn
-    pub fn scan_devices() -> Result<Vec<IosDevice>, DeviceError> {
-        debug!("開始掃描 iOS 設備...");
-
-        // 呼叫底層 C API
-        let raw_devices = match idevice::get_devices() {
-            Ok(devices) => devices,
-            Err(e) => {
-                error!("底層 API 呼叫失敗: {:?}", e);
-                return Err(DeviceError::DaemonConnectionFailed);
-            }
+        let device_list = match idevice::get_devices() {
+            Ok(list) => list,
+            Err(e) => return Err(AppError::DaemonUnavailable(format!("usbmuxd 掃描失敗: {}", e))),
         };
 
-        if raw_devices.is_empty() {
-            info!("目前無設備連接。");
-            return Ok(vec![]);
-        }
+        for device in device_list {
+            let udid = device.get_udid();
+            let connection_type = ConnectionType::Usb;
 
-        // 將第三方結構映射為我們自己的 Domain 結構
-        let mut parsed_devices = Vec::new();
-        for device in raw_devices {
-            let udid = device.get_udid().to_string();
-            
-            // 邏輯審計：依據底層 API 判斷連線類型
-            let conn_type = if device.get_network() {
-                ConnectionType::Network
-            } else {
-                ConnectionType::Usb
+            // 修正 1：依照編譯器建議，改用 LockdowndClient::new
+            let (name, ios_version) = match LockdowndClient::new(&device, "pikmin_location") {
+                Ok(client) => {
+                    // 修正 2：捨棄 .ok() 簡寫，使用完整的 match 強制確立型別為 Option<String>
+                    let dev_name: Option<String> = match client.get_device_name() {
+                        Ok(n) => Some(n),
+                        Err(_) => None,
+                    };
+                    
+                    // 修正 3：同上，捨棄任何 map 或 ok() 閉包
+                    let version: Option<String> = match client.get_value("ProductVersion", "") {
+                        Ok(node) => {
+                            // 這裡透過明確宣告變數 s 幫助編譯器確立 to_string() 的目標型別
+                            let s: String = node.to_string();
+                            Some(s)
+                        },
+                        Err(_) => None,
+                    };
+
+                    (dev_name, version)
+                },
+                Err(_) => (None, None),
             };
 
-            parsed_devices.push(IosDevice {
+            result_list.push(IosDevice {
                 udid,
-                connection_type: conn_type,
+                connection_type,
+                name,
+                ios_version,
             });
         }
 
-        Ok(parsed_devices)
-    }
+        Ok(result_list)
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("執行緒崩潰: {}", e)))??;
+
+    Ok(devices)
 }
 
+/// 查詢指定裝置的 iOS 版本
 #[tauri::command]
-pub fn get_connected_devices() -> Result<Vec<IosDevice>, String> {
-    // 呼叫我們已經寫好的底層掃描邏輯
-    match DeviceDiscoveryService::scan_devices() {
-        Ok(devices) => Ok(devices),
-        // 如果底層拋出 DeviceError，我們將其轉成字串 (String) 傳給前端
-        // 因為 Tauri 預設不支援自定義錯誤的跨語言傳遞，字串是最安全的做法
-        Err(e) => Err(e.to_string()),
-    }
+pub async fn get_device_ios_version(udid: String) -> Result<String, AppError> {
+    let devices = get_connected_devices().await?;
+    
+    let device = devices.into_iter().find(|d| d.udid == udid)
+        .ok_or_else(|| AppError::DeviceUnresponsive { udid: udid.clone() })?;
+
+    device.ios_version.ok_or_else(|| {
+        AppError::Internal("無法讀取設備版本，請確認手機已解鎖並信任此電腦".to_string())
+    })
 }
