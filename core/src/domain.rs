@@ -1,9 +1,11 @@
+use serde::Serialize;
+
 #[allow(dead_code)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)] // 新增 Serialize
 pub enum ConnectionType {
     Usb,
-    Network, // Wi-Fi 或 iOS 17 的虛擬網路
-    Unknown
+    Network,
+    Unknown,
 }
 
 impl std::fmt::Display for ConnectionType {
@@ -17,8 +19,7 @@ impl std::fmt::Display for ConnectionType {
     }
 }
 
-/// 代表一台已連接的 iOS 設備
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)] // 新增 Serialize
 pub struct IosDevice {
     pub udid: String,
     pub connection_type: ConnectionType,
