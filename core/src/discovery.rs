@@ -46,3 +46,14 @@ impl DeviceDiscoveryService {
         Ok(parsed_devices)
     }
 }
+
+#[tauri::command]
+pub fn get_connected_devices() -> Result<Vec<IosDevice>, String> {
+    // 呼叫我們已經寫好的底層掃描邏輯
+    match DeviceDiscoveryService::scan_devices() {
+        Ok(devices) => Ok(devices),
+        // 如果底層拋出 DeviceError，我們將其轉成字串 (String) 傳給前端
+        // 因為 Tauri 預設不支援自定義錯誤的跨語言傳遞，字串是最安全的做法
+        Err(e) => Err(e.to_string()),
+    }
+}
