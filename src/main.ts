@@ -1,11 +1,15 @@
+// 1. 優先引入 CSS (Side-effect import)
+import "leaflet/dist/leaflet.css";
+
+// 2. 引入自定義模組 (只引入一次)
 import { Commands, GpsCoordinate, AppError } from "./ipc/commands";
 import { Events } from "./ipc/events";
 import { MapModule } from "./ui/map";
 
-// 1. 初始化地圖模組
+// 3. 初始化地圖模組
 const map = new MapModule();
 
-// 2. 取得 UI 元素
+// 4. 取得 UI 元素
 const scanBtn = document.getElementById("scan-btn") as HTMLButtonElement;
 const mountBtn = document.getElementById("mount-btn") as HTMLButtonElement;
 const deviceListDiv = document.getElementById("device-list") as HTMLDivElement;
@@ -20,7 +24,7 @@ const waypointCountSpan = document.getElementById("waypoint-count") as HTMLSpanE
 const startMoveBtn = document.getElementById("start-move-btn") as HTMLButtonElement;
 const stopMoveBtn = document.getElementById("stop-move-btn") as HTMLButtonElement;
 
-// 3. 應用程式局部狀態
+// 5. 應用程式局部狀態
 let selectedUdid = "";
 let selectedVersion = "";
 let waypoints: GpsCoordinate[] = [];
@@ -30,11 +34,9 @@ let waypoints: GpsCoordinate[] = [];
  */
 function parseError(e: any): string {
   console.error("DEBUG - IPC Error Object:", e);
-  // 如果是後端傳回的結構化 AppError，通常會有 message 欄位
   if (typeof e === 'object' && e !== null && 'message' in e) {
     return e.message;
   }
-  // 如果是字串或其他型別
   return typeof e === 'string' ? e : JSON.stringify(e);
 }
 
@@ -52,7 +54,6 @@ scanBtn.addEventListener("click", async () => {
       return;
     }
 
-    // 取得第一台設備資訊
     const dev = devices[0];
     selectedUdid = dev.udid;
     selectedVersion = dev.ios_version || "16.0";
@@ -82,7 +83,6 @@ mountBtn.addEventListener("click", async () => {
     mountStatusDiv.innerText = `✅ ${result.message}`;
     mountStatusDiv.style.color = "green";
     
-    // 解鎖座標控制功能
     toggleLocationControls(true);
   } catch (e) {
     mountStatusDiv.innerText = `❌ 掛載失敗: ${parseError(e)}`;
@@ -102,7 +102,6 @@ function toggleLocationControls(enabled: boolean) {
   startMoveBtn.disabled = !enabled;
 }
 
-// 監聽地圖點擊（更新輸入框與累積路徑點）
 document.getElementById("map")?.addEventListener("click", () => {
   const lat = parseFloat(latInput.value);
   const lon = parseFloat(lonInput.value);
