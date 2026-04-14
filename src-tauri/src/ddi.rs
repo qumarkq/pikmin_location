@@ -1,48 +1,85 @@
-use serde::Serialize;
-use std::path::Path;
-use tauri::command;
+#![allow(dead_code)]
 
-// 定義回傳給前端的標準資料結構
-#[derive(Serialize)]
-pub struct MountResult {
-    pub success: bool,
-    pub message: String,
+use crate::domain::OperationResult;
+use crate::error::AppError;
+use rusty_libimobiledevice::idevice;
+use rusty_libimobiledevice::services::mobile_image_mounter::MobileImageMounter;
+use rusty_libimobiledevice::services::lockdownd::LockdowndClient;
+use serde::Serialize;
+use tauri::{AppHandle, Emitter};
+
+#[derive(Clone, Serialize)]
+struct DdiMountedPayload {
+    udid: String,
+    ios_version: String,
 }
 
-/// 檢查並掛載 DDI 映像檔的 Tauri Command
-/// 此函數會接收前端傳來的 UDID 與 iOS 版本字串
-#[command]
-pub async fn check_and_mount_ddi(udid: String, ios_version: String) -> Result<MountResult, String> {
-    println!("準備為設備 {} 掛載 iOS {} 映像檔...", udid, ios_version);
+#[tauri::command]
+pub async fn check_ddi_exists(ios_version: String) -> Result<bool, AppError> {
+    let ddi_path = format!("./ddi/{}/DeveloperDiskImage.dmg", ios_version);
+    let sig_path = format!("{}.signature", ddi_path);
 
-    // 1. 定義 DDI 檔案的預期路徑 (相對於 src-tauri 目錄)
-    // 我們將映像檔放在 src-tauri/ddi/{ios_version}/ 目錄下
-    let base_ddi_dir = format!("./ddi/{}", ios_version);
-    let dmg_path = format!("{}/DeveloperDiskImage.dmg", base_ddi_dir);
-    let sig_path = format!("{}/DeveloperDiskImage.dmg.signature", base_ddi_dir);
+    let ddi_exists = tokio::fs::try_exists(&ddi_path).await.unwrap_or(false);
+    let sig_exists = tokio::fs::try_exists(&sig_path).await.unwrap_or(false);
 
-    // 2. 嚴格的路徑與檔案存在性檢查
-    let dmg_exists = Path::new(&dmg_path).exists();
-    let sig_exists = Path::new(&sig_path).exists();
+    Ok(ddi_exists && sig_exists)
+}
 
-    if !dmg_exists || !sig_exists {
-        let error_msg = format!(
-            "找不到 iOS {} 的開發者映像檔。\n請確保以下檔案存在：\n1. {}\n2. {}",
-            ios_version, dmg_path, sig_path
-        );
-        return Err(error_msg);
+#[tauri::command]
+pub async fn mount_ddi(
+    app: AppHandle,
+    udid: String,
+    ios_version: String,
+) -> Result<OperationResult, AppError> {
+    let exists = check_ddi_exists(ios_version.clone()).await?;
+    if !exists {
+        return Err(AppError::DdiNotFound { version: ios_version });
     }
 
-    // 3. 模擬底層 libimobiledevice 掛載邏輯 (未來實作區塊)
-    // TODO: 在此處呼叫 C FFI 建立 IDEVICE 連線，並啟動 com.apple.mobile.image_mounter 服務
-    // 目前使用延遲來模擬掛載過程 (讓前端 UI 有足夠的反應時間顯示 loading)
-    std::thread::sleep(std::time::Duration::from_secs(2));
+    let ddi_path = format!("./ddi/{}/DeveloperDiskImage.dmg", ios_version);
+    let sig_path = format!("{}.signature", ddi_path);
+    let udid_clone = udid.clone();
 
-    println!("設備 {} 掛載 DDI 成功！", udid);
+    tokio::task::spawn_blocking(move || -> Result<(), AppError> {
+        let device = match idevice::get_device(&udid_clone) {
+            Ok(d) => d,
+            Err(_) => return Err(AppError::DeviceUnresponsive { udid: udid_clone.clone() }),
+        };
+        
+        // 修正：加上 mut，因為 start_service 會修改 lockdownd 內部的連線狀態
+        let mut lockdownd = match LockdowndClient::new(&device, "pikmin_location") {
+            Ok(l) => l,
+            Err(e) => return Err(AppError::Internal(format!("Lockdownd 連線失敗: {:?}", e))),
+        };
 
-    // 4. 回傳成功狀態給前端
-    Ok(MountResult {
+        let service = match lockdownd.start_service("com.apple.mobile.mobile_image_mounter", true) {
+            Ok(s) => s,
+            Err(e) => return Err(AppError::Internal(format!("無法開啟掛載通訊協定: {:?}", e))),
+        };
+
+        let mounter = match MobileImageMounter::new(&device, service) {
+            Ok(m) => m,
+            Err(e) => return Err(AppError::Internal(format!("無法啟動 ImageMounter: {:?}", e))),
+        };
+        
+        match mounter.mount_image(&ddi_path, &sig_path, "Developer") {
+            Ok(_) => Ok(()),
+            Err(e) => Err(AppError::DdiMountFailed(format!("{:?}", e))),
+        }
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("執行緒崩潰: {:?}", e)))??;
+
+    let payload = DdiMountedPayload {
+        udid: udid.clone(),
+        ios_version: ios_version.clone(),
+    };
+    
+    app.emit("ddi://mounted", payload)
+        .map_err(|e| AppError::Internal(format!("Tauri 事件發送失敗: {}", e)))?;
+
+    Ok(OperationResult {
         success: true,
-        message: format!("iOS {} 映像檔掛載成功，simulatelocation 服務已解鎖。", ios_version),
+        message: format!("iOS {} 開發者映像檔掛載成功", ios_version),
     })
 }
