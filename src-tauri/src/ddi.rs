@@ -9,13 +9,6 @@ pub struct MountResult {
     pub message: String,
 }
 
-// 定義未來要使用的 iOS 設備結構 (與 discovery 模組共用)
-#[derive(Serialize)]
-pub struct IosDevice {
-    pub udid: String,
-    pub connection_type: String,
-}
-
 /// 檢查並掛載 DDI 映像檔的 Tauri Command
 /// 此函數會接收前端傳來的 UDID 與 iOS 版本字串
 #[command]
