@@ -11,15 +11,13 @@ use tokio::sync::Mutex;
 
 fn main() {
     tauri::Builder::default()
-        // 1. 初始化並託管 LocationState (存放取消令牌)，這是讓 location 模組正常運作的關鍵
         .manage(LocationState {
             active_tasks: Arc::new(Mutex::new(HashMap::new())),
         })
-        // 2. 註冊所有可供前端呼叫的 Tauri 指令
         .invoke_handler(tauri::generate_handler![
             discovery::get_connected_devices,
             discovery::get_device_ios_version,
-            ddi::check_ddi_exists,
+            // ddi::check_ddi_exists, // 👈 刪除這一行，因為它不存在
             ddi::mount_ddi,
             location::set_location,
             location::start_movement,

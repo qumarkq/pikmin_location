@@ -1,72 +1,47 @@
-use crate::domain::{ConnectionType, IosDevice};
+use crate::domain::IosDevice;
 use crate::error::AppError;
 use rusty_libimobiledevice::idevice;
 use rusty_libimobiledevice::services::lockdownd::LockdowndClient;
 
-/// 取得目前所有連接的 iOS 設備
 #[tauri::command]
 pub async fn get_connected_devices() -> Result<Vec<IosDevice>, AppError> {
-    let devices = tokio::task::spawn_blocking(|| -> Result<Vec<IosDevice>, AppError> {
-        let mut result_list = Vec::new();
+    let devices = idevice::get_devices()
+        .map_err(|_| AppError::DaemonUnavailable)?;
 
-        let device_list = match idevice::get_devices() {
-            Ok(list) => list,
-            Err(e) => return Err(AppError::DaemonUnavailable(format!("usbmuxd 掃描失敗: {}", e))),
-        };
+    let mut result: Vec<IosDevice> = Vec::new();
 
-        for device in device_list {
-            let udid = device.get_udid();
-            let connection_type = ConnectionType::Usb;
-
-            // 修正 1：依照編譯器建議，改用 LockdowndClient::new
-            let (name, ios_version) = match LockdowndClient::new(&device, "pikmin_location") {
-                Ok(client) => {
-                    // 修正 2：捨棄 .ok() 簡寫，使用完整的 match 強制確立型別為 Option<String>
-                    let dev_name: Option<String> = match client.get_device_name() {
-                        Ok(n) => Some(n),
-                        Err(_) => None,
-                    };
-                    
-                    // 修正 3：同上，捨棄任何 map 或 ok() 閉包
-                    let version: Option<String> = match client.get_value("ProductVersion", "") {
-                        Ok(node) => {
-                            // 這裡透過明確宣告變數 s 幫助編譯器確立 to_string() 的目標型別
-                            let s: String = node.to_string();
-                            Some(s)
-                        },
-                        Err(_) => None,
-                    };
-
-                    (dev_name, version)
-                },
-                Err(_) => (None, None),
-            };
-
-            result_list.push(IosDevice {
-                udid,
-                connection_type,
-                name,
-                ios_version,
-            });
-        }
-
-        Ok(result_list)
-    })
-    .await
-    .map_err(|e| AppError::Internal(format!("執行緒崩潰: {}", e)))??;
-
-    Ok(devices)
+    for dev in devices {
+        let udid = dev.get_udid();
+        let ios_version = get_device_ios_version(udid.clone()).await.ok();
+        
+        result.push(IosDevice {
+            udid: udid.clone(),
+            connection_type: crate::domain::ConnectionType::Usb,
+            name: None,
+            ios_version,
+        });
+    }
+    Ok(result)
 }
 
-/// 查詢指定裝置的 iOS 版本
 #[tauri::command]
 pub async fn get_device_ios_version(udid: String) -> Result<String, AppError> {
-    let devices = get_connected_devices().await?;
+    let device = idevice::get_device(&udid)
+        .map_err(|_| AppError::DeviceUnresponsive { udid: udid.clone() })?;
     
-    let device = devices.into_iter().find(|d| d.udid == udid)
-        .ok_or_else(|| AppError::DeviceUnresponsive { udid: udid.clone() })?;
+    // 修正：移除 mut，因為 get_value 只需要不可變引用
+    let lockdown = LockdowndClient::new(&device, "pikmin")
+        .map_err(|e| AppError::Internal(format!("Lockdownd 失敗: {:?}", e)))?;
 
-    device.ios_version.ok_or_else(|| {
-        AppError::Internal("無法讀取設備版本，請確認手機已解鎖並信任此電腦".to_string())
-    })
+    let version_plist = lockdown.get_value("", "ProductVersion")
+        .map_err(|e| AppError::Internal(format!("無法獲取版本: {:?}", e)))?;
+
+    // 使用 to_string() 取得內容字串
+    let version_str = version_plist.to_string();
+
+    if version_str.is_empty() {
+        return Err(AppError::Internal("抓到的版本號為空".to_string()));
+    }
+
+    Ok(version_str)
 }

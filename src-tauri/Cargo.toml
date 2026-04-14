@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-
+base64 = "0.21"
 #######################---框架---#######################
 rusty_libimobiledevice = "0.2"
 thiserror = "1.0"      # 用於建立結構化的自訂錯誤

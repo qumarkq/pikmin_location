@@ -1,85 +1,54 @@
-#![allow(dead_code)]
-
 use crate::domain::OperationResult;
 use crate::error::AppError;
 use rusty_libimobiledevice::idevice;
-use rusty_libimobiledevice::services::mobile_image_mounter::MobileImageMounter;
 use rusty_libimobiledevice::services::lockdownd::LockdowndClient;
-use serde::Serialize;
-use tauri::{AppHandle, Emitter};
-
-#[derive(Clone, Serialize)]
-struct DdiMountedPayload {
-    udid: String,
-    ios_version: String,
-}
+use rusty_libimobiledevice::services::mobile_image_mounter::MobileImageMounter;
+use std::fs;
+use std::path::Path;
+use base64::{Engine as _, engine::general_purpose};
 
 #[tauri::command]
-pub async fn check_ddi_exists(ios_version: String) -> Result<bool, AppError> {
-    let ddi_path = format!("./ddi/{}/DeveloperDiskImage.dmg", ios_version);
-    let sig_path = format!("{}.signature", ddi_path);
-
-    let ddi_exists = tokio::fs::try_exists(&ddi_path).await.unwrap_or(false);
-    let sig_exists = tokio::fs::try_exists(&sig_path).await.unwrap_or(false);
-
-    Ok(ddi_exists && sig_exists)
-}
-
-#[tauri::command]
-pub async fn mount_ddi(
-    app: AppHandle,
-    udid: String,
-    ios_version: String,
-) -> Result<OperationResult, AppError> {
-    let exists = check_ddi_exists(ios_version.clone()).await?;
-    if !exists {
-        return Err(AppError::DdiNotFound { version: ios_version });
-    }
-
-    let ddi_path = format!("./ddi/{}/DeveloperDiskImage.dmg", ios_version);
-    let sig_path = format!("{}.signature", ddi_path);
+pub async fn mount_ddi(udid: String, ios_version: String) -> Result<OperationResult, AppError> {
     let udid_clone = udid.clone();
+    let version_clone = ios_version.clone();
 
-    tokio::task::spawn_blocking(move || -> Result<(), AppError> {
-        let device = match idevice::get_device(&udid_clone) {
-            Ok(d) => d,
-            Err(_) => return Err(AppError::DeviceUnresponsive { udid: udid_clone.clone() }),
-        };
-        
-        // 修正：加上 mut，因為 start_service 會修改 lockdownd 內部的連線狀態
-        let mut lockdownd = match LockdowndClient::new(&device, "pikmin_location") {
-            Ok(l) => l,
-            Err(e) => return Err(AppError::Internal(format!("Lockdownd 連線失敗: {:?}", e))),
-        };
+    tokio::task::spawn_blocking(move || {
+        // 絕對動態：根據前端傳來的版本號去找資料夾
+        let base_path = format!("/Users/quma/Documents/ddi/{}", version_clone);
+        let dmg_path = Path::new(&base_path).join("DeveloperDiskImage.dmg");
+        let sig_path = Path::new(&base_path).join("DeveloperDiskImage.dmg.signature");
 
-        let service = match lockdownd.start_service("com.apple.mobile.mobile_image_mounter", true) {
-            Ok(s) => s,
-            Err(e) => return Err(AppError::Internal(format!("無法開啟掛載通訊協定: {:?}", e))),
-        };
-
-        let mounter = match MobileImageMounter::new(&device, service) {
-            Ok(m) => m,
-            Err(e) => return Err(AppError::Internal(format!("無法啟動 ImageMounter: {:?}", e))),
-        };
-        
-        match mounter.mount_image(&ddi_path, &sig_path, "Developer") {
-            Ok(_) => Ok(()),
-            Err(e) => Err(AppError::DdiMountFailed(format!("{:?}", e))),
+        if !dmg_path.exists() || !sig_path.exists() {
+            return Err(AppError::DdiNotFound { ios_version: version_clone });
         }
+
+        let image_bytes = fs::read(&dmg_path)?;
+        let signature_bytes = fs::read(&sig_path)?;
+        
+        // 核心：轉換為 Base64 字串傳輸
+        let img_b64 = general_purpose::STANDARD.encode(image_bytes);
+        let sig_b64 = general_purpose::STANDARD.encode(signature_bytes);
+
+        let device = idevice::get_device(&udid_clone)
+            .map_err(|_| AppError::DeviceUnresponsive { udid: udid_clone })?;
+        
+        let mut lockdownd = LockdowndClient::new(&device, "pikmin")
+            .map_err(|e| AppError::Internal(format!("Lockdownd 失敗: {:?}", e)))?;
+
+        let service = lockdownd.start_service("com.apple.mobile.developer_images_mounter", false)
+            .map_err(|_| AppError::Internal("無法啟動掛載服務，請確認手機已信任此電腦".to_string()))?;
+
+        let mounter = MobileImageMounter::new(&device, service)
+            .map_err(|e| AppError::Internal(format!("Mounter 初始化失敗: {:?}", e)))?;
+
+        mounter.mount_image(img_b64, sig_b64, "Developer")
+            .map_err(|e| AppError::Internal(format!("掛載過程失敗: {:?}", e)))?;
+
+        Ok(OperationResult {
+            success: true,
+            message: format!("iOS {} 映像檔掛載完成", version_clone),
+        })
     })
     .await
-    .map_err(|e| AppError::Internal(format!("執行緒崩潰: {:?}", e)))??;
-
-    let payload = DdiMountedPayload {
-        udid: udid.clone(),
-        ios_version: ios_version.clone(),
-    };
-    
-    app.emit("ddi://mounted", payload)
-        .map_err(|e| AppError::Internal(format!("Tauri 事件發送失敗: {}", e)))?;
-
-    Ok(OperationResult {
-        success: true,
-        message: format!("iOS {} 開發者映像檔掛載成功", ios_version),
-    })
+    .map_err(|e| AppError::Internal(e.to_string()))?
 }
