@@ -1,14 +1,27 @@
+use serde::Serialize;
 use thiserror::Error;
 
-#[allow(dead_code)]
-#[derive(Error, Debug)]
-pub enum DeviceError {
-    #[error("無法連接到底層服務 (usbmuxd)。請確認是否已安裝並啟動。")]
-    DaemonConnectionFailed,
+#[derive(Error, Debug, Serialize)]
+#[serde(tag = "kind", content = "message")]
+pub enum AppError {
+    #[error("無法連接至 usbmuxd 服務: {0}")]
+    DaemonUnavailable(String),
 
-    #[error("讀取設備列表失敗: {0}")]
-    ScanFailed(String),
+    #[error("設備 {udid} 未回應")]
+    DeviceUnresponsive { udid: String },
 
-    #[error("未知錯誤: {0}")]
-    Unknown(String),
+    #[error("找不到 iOS {version} 的 DDI 映像檔")]
+    DdiNotFound { version: String },
+
+    #[error("DDI 掛載失敗: {0}")]
+    DdiMountFailed(String),
+
+    #[error("GPS 模擬服務未就緒，請先掛載 DDI")]
+    LocationServiceNotReady,
+
+    #[error("座標超出有效範圍: lat={lat}, lon={lon}")]
+    InvalidCoordinate { lat: f64, lon: f64 },
+
+    #[error("內部錯誤: {0}")]
+    Internal(String),
 }
