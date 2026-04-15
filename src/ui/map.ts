@@ -1,71 +1,35 @@
-import L from 'leaflet'; // 👈 補上這一行，讓 TS 認識 L
-import { GpsCoordinate } from "../ipc/commands";
+import * as L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
-// 取得 UI 上的輸入框元素
-const latInput = document.getElementById("input-lat") as HTMLInputElement;
-const lonInput = document.getElementById("input-lon") as HTMLInputElement;
-
-export class MapModule {
+export class LocationMap {
   private map: L.Map;
-  private deviceMarker: L.Marker | null = null;
-  private trajectory: L.Polyline | null = null;
-  private pathPoints: [number, number][] = [];
+  private marker: L.Marker;
+  public selectedCoord: { lat: number; lng: number } | null = null;
+  private onLocationSelectCallback: ((lat: number, lng: number) => void) | null = null;
 
-  constructor() {
-    // 1. 依據規格書 9.3：初始化地圖，預設中心台北
-    this.map = L.map("map").setView([25.0330, 121.5654], 13);
+  constructor(containerId: string) {
+    // 預設中心點 (新莊區)
+    this.map = L.map(containerId).setView([25.035, 121.432], 14);
 
-    // 2. 引入 OpenStreetMap 圖層
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; OpenStreetMap contributors'
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
     }).addTo(this.map);
 
-    // 3. 處理點擊地圖選取座標邏輯
-    this.map.on("click", (e: L.LeafletMouseEvent) => {
-      const { lat, lng } = e.latlng;
+    this.marker = L.marker([25.035, 121.432]).addTo(this.map);
+
+    // 點擊地圖時更新座標
+    this.map.on('click', (e: L.LeafletMouseEvent) => {
+      this.selectedCoord = { lat: e.latlng.lat, lng: e.latlng.lng };
+      this.marker.setLatLng(e.latlng);
       
-      // 更新輸入框內容
-      latInput.value = lat.toFixed(6);
-      lonInput.value = lng.toFixed(6);
-      
-      console.log(`[Map] 選取座標: ${lat}, ${lng}`);
+      if (this.onLocationSelectCallback) {
+        this.onLocationSelectCallback(e.latlng.lat, e.latlng.lng);
+      }
     });
   }
 
-  /**
-   * 更新設備在地圖上的位置與軌跡
-   */
-  public updateDeviceLocation(coord: GpsCoordinate) {
-    const pos: L.LatLngExpression = [coord.latitude, coord.longitude];
-    this.pathPoints.push([coord.latitude, coord.longitude]);
-
-    // 更新或建立 Marker
-    if (!this.deviceMarker) {
-      this.deviceMarker = L.marker(pos).addTo(this.map)
-        .bindPopup("iOS 裝置目前位置")
-        .openPopup();
-    } else {
-      this.deviceMarker.setLatLng(pos);
-    }
-
-    // 更新或建立歷史軌跡 (Polyline)
-    if (!this.trajectory) {
-      this.trajectory = L.polyline(this.pathPoints, { color: 'blue', weight: 3 }).addTo(this.map);
-    } else {
-      this.trajectory.setLatLngs(this.pathPoints as L.LatLngExpression[]);
-    }
-
-    // 平滑移動地圖中心至新座標
-    this.map.panTo(pos);
-  }
-
-  /**
-   * 清除目前的軌跡
-   */
-  public clearTrajectory() {
-    this.pathPoints = [];
-    if (this.trajectory) {
-      this.trajectory.setLatLngs([]);
-    }
+  // 註冊選擇座標後的回呼函式，讓 main.ts 可以更新 UI
+  public onLocationSelect(callback: (lat: number, lng: number) => void) {
+    this.onLocationSelectCallback = callback;
   }
 }

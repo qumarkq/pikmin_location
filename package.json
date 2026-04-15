@@ -7,7 +7,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/api": "^2.0.1",
     "leaflet": "^1.9.4"
   },
   "devDependencies": {

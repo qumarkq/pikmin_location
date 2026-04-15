@@ -1,0 +1,76 @@
+/* src/style.css */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: #f9f9f9;
+  color: #333;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.control-panel {
+  background-color: #ffffff;
+  padding: 16px 24px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 1000;
+}
+
+.panel-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+select {
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+}
+
+button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: opacity 0.2s;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.primary-btn { background-color: #007aff; color: white; }
+.action-btn { background-color: #34c759; color: white; }
+.highlight { font-weight: bold; color: #007aff; font-family: monospace;}
+
+/* 這是最關鍵的一段，沒有它地圖就出不來 */
+#map {
+  flex-grow: 1;
+  width: 100%;
+}
+
+#log-console {
+  height: 150px;
+  background-color: #1e1e1e;
+  color: #00ff00;
+  overflow-y: auto;
+  padding: 12px;
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.log-entry { margin-bottom: 4px; }
+.log-entry.error { color: #ff453a; }
+.log-entry.success { color: #32d74b; }
+.log-entry.info { color: #a9a9a9; }
