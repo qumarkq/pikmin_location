@@ -4,14 +4,14 @@ use thiserror::Error;
 #[derive(Debug, Error, Serialize)]
 #[serde(tag = "kind", content = "message")]
 pub enum AppError {
-    #[error("設備無回應: {udid}")]
+    #[error("設備無回應 (UDID: {udid})")]
     DeviceUnresponsive { udid: String },
     
-    #[error("無法連接至 usbmuxd 守護進程，請確認已安裝 iTunes 或 Apple 裝置服務")]
-    DaemonUnavailable, // 👈 補上這一行，解決 discovery.rs 的問題
+    #[error("無法連接至 usbmuxd")]
+    DaemonUnavailable,
     
-    #[error("找不到 iOS {ios_version} 的 DDI 檔案，路徑應為 /Users/quma/Documents/ddi/{ios_version}")]
-    DdiNotFound { ios_version: String },
+    #[error("pymobiledevice3 執行失敗: {0}。請確認已安裝 (pip3 install pymobiledevice3)")]
+    CliExecutionFailed(String),
     
     #[error("定位服務未就緒")]
     LocationServiceNotReady,
