@@ -1,10 +1,13 @@
+// 防止 Windows 下執行時跳出命令列視窗
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod domain;
 mod error;
-mod ddi;
 mod discovery;
+mod ddi;
 mod location;
 
-use location::LocationState; // 現在 location.rs 裡有 pub LocationState 了
+use location::LocationState;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -17,11 +20,11 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             discovery::get_connected_devices,
             discovery::get_device_ios_version,
-            ddi::mount_ddi,      // 👈 現在 ddi.rs 有標籤了
+            ddi::mount_ddi,
             location::set_location,
-            location::start_movement, // 👈 現在 location.rs 有標籤了
-            location::stop_movement   // 👈 現在 location.rs 有標籤了
+            location::start_movement,
+            location::stop_movement
         ])
         .run(tauri::generate_context!())
-        .expect("致命錯誤");
+        .expect("Tauri 應用程式執行時發生致命錯誤");
 }

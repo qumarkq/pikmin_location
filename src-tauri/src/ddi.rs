@@ -7,7 +7,6 @@ pub async fn mount_ddi(udid: String, ios_version: String) -> Result<OperationRes
     tokio::task::spawn_blocking(move || {
         println!("LOG: 啟動 pymobiledevice3 自動掛載流程...");
 
-        // 呼叫本機的 Python 執行 pymobiledevice3
         let output = Command::new("python3")
             .args([
                 "-m", "pymobiledevice3", 

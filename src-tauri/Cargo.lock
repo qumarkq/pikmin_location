@@ -435,19 +435,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "core"
-version = "0.1.0"
-dependencies = [
- "rusty_libimobiledevice",
- "serde",
- "tauri",
- "tauri-build",
- "thiserror 1.0.69",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
 name = "core-foundation"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2578,6 +2565,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e57fef6bc5981e38c2ce2d63bfa546861309f875b8a75f092d1d54ae2d64f266"
 dependencies = [
  "siphasher 1.0.2",
+]
+
+[[package]]
+name = "pikmin_location"
+version = "0.1.0"
+dependencies = [
+ "rusty_libimobiledevice",
+ "serde",
+ "tauri",
+ "tauri-build",
+ "thiserror 1.0.69",
+ "tokio",
 ]
 
 [[package]]
